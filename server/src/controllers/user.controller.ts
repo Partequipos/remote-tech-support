@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import { Request, Response } from 'express';
 import { Op } from 'sequelize';
 import { User } from '../models';
@@ -178,11 +177,16 @@ export const updateUser = async (req: Request, res: Response) => {
       phone: phone === undefined ? user.phone : phone,
     };
 
-    // Si se proporciona una nueva contraseña, hashearla antes de guardar
-    if (password && password.trim() !== '') {
+    // Vacío = conservar la actual. Si viene texto, el hook beforeUpdate hashea una sola vez.
+    const nextPassword = typeof password === 'string' ? password.trim() : '';
+    if (nextPassword) {
+      if (nextPassword.length < 6) {
+        return res.status(400).json({
+          message: 'La contraseña debe tener al menos 6 caracteres',
+        });
+      }
       logger.info(`Actualizando contraseña para usuario: ${user.name}`);
-      const hashedPassword = await bcrypt.hash(password, 10);
-      user.password = hashedPassword;
+      user.password = nextPassword;
     } else {
       logger.info(`Manteniendo contraseña actual para usuario: ${user.name}`);
     }

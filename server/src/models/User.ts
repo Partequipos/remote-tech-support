@@ -44,6 +44,17 @@ export class User extends Model<UserAttributes> implements UserAttributes {
   }
 }
 
+/** Evita hashear de nuevo una contraseña que el controlador ya cifró con bcrypt. */
+const BCRYPT_HASH = /^\$2[aby]\$\d{2}\$/;
+
+async function hashPlainPassword(user: User): Promise<void> {
+  if (!user.password || BCRYPT_HASH.test(user.password)) {
+    return;
+  }
+  const salt = await bcrypt.genSalt(10);
+  user.password = await bcrypt.hash(user.password, salt);
+}
+
 User.init(
   {
     id: {
@@ -116,15 +127,11 @@ User.init(
     modelName: 'User',
     hooks: {
       beforeCreate: async (user: User) => {
-        if (user.password) {
-          const salt = await bcrypt.genSalt(10);
-          user.password = await bcrypt.hash(user.password, salt);
-        }
+        await hashPlainPassword(user);
       },
       beforeUpdate: async (user: User) => {
         if (user.changed('password')) {
-          const salt = await bcrypt.genSalt(10);
-          user.password = await bcrypt.hash(user.password, salt);
+          await hashPlainPassword(user);
         }
       },
     },

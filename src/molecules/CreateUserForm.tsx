@@ -33,7 +33,9 @@ export const CreateUserForm: React.FC<CreateUserFormProps> = ({ onSubmit, onCanc
     try {
       await onSubmit(formData);
     } catch (err) {
-      setError('Error al crear el usuario');
+      setError(
+        err instanceof Error ? err.message : 'Error al guardar el usuario'
+      );
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -91,7 +93,7 @@ export const CreateUserForm: React.FC<CreateUserFormProps> = ({ onSubmit, onCanc
         onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
         leftIcon={<Lock size={18} />}
         required={!isEditing}
-        minLength={isEditing ? 0 : 6}
+        minLength={6}
         placeholder={isEditing ? "Dejar vacío para mantener la contraseña actual" : ""}
       />
 

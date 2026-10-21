@@ -80,7 +80,9 @@ export const UsersPage: React.FC = () => {
       toast.success('Usuario actualizado exitosamente');
     } catch (err) {
       console.error('Error al actualizar usuario:', err);
-      toast.error('Error al actualizar usuario');
+      toast.error(
+        err instanceof Error ? err.message : 'Error al actualizar usuario'
+      );
       throw err;
     }
   };
