@@ -14,10 +14,10 @@ import { Ticket, TicketEditPayload, User } from '../types';
 
 type DetailTab = 'details' | 'chat' | 'call';
 
-const DETAIL_TABS: DetailTab[] = ['details', 'chat', 'call'];
+const DETAIL_TABS = new Set<DetailTab>(['details', 'chat', 'call']);
 
 function isDetailTab(value: string | null): value is DetailTab {
-  return value !== null && DETAIL_TABS.includes(value as DetailTab);
+  return value !== null && DETAIL_TABS.has(value as DetailTab);
 }
 
 function buildRemoteUsersForCall(
@@ -128,7 +128,7 @@ export const TicketDetailPage: React.FC = () => {
       }
     };
 
-    fetchData();
+    void fetchData();
   }, [ticketId]);
 
   const handleChangeStatus = async (
@@ -208,7 +208,7 @@ export const TicketDetailPage: React.FC = () => {
     if (isPermissionErrorMessage(error)) {
       return (
         <PermissionDenied
-          message={error}
+          message={error ?? undefined}
           onGoBack={() => navigate('/tickets')}
         />
       );
