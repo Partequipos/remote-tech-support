@@ -12,6 +12,14 @@ import { VideoCallPanel } from '../organisms/VideoCallPanel';
 import { ticketService, userService } from '../services/api';
 import { Ticket, TicketEditPayload, User } from '../types';
 
+type DetailTab = 'details' | 'chat' | 'call';
+
+const DETAIL_TABS: DetailTab[] = ['details', 'chat', 'call'];
+
+function isDetailTab(value: string | null): value is DetailTab {
+  return value !== null && DETAIL_TABS.includes(value as DetailTab);
+}
+
 function buildRemoteUsersForCall(
   customerId: string,
   technicianId: string | undefined,
@@ -22,6 +30,45 @@ function buildRemoteUsersForCall(
   if (customer) result[customerId] = customer;
   if (technician && technicianId != null) result[technicianId] = technician;
   return result;
+}
+
+function pickEditedField<T>(
+  updated: T | undefined,
+  payload: T | undefined,
+  current: T | undefined
+): T | undefined {
+  if (updated !== undefined) return updated;
+  if (payload !== undefined) return payload;
+  return current;
+}
+
+function mergeEditedTicket(
+  current: Ticket,
+  updatedTicket: Ticket,
+  payload: TicketEditPayload
+): Ticket {
+  return {
+    ...updatedTicket,
+    title: updatedTicket.title ?? payload.title,
+    description: updatedTicket.description ?? payload.description,
+    priority: updatedTicket.priority ?? payload.priority ?? current.priority,
+    marca: pickEditedField(updatedTicket.marca, payload.marca, current.marca),
+    modeloEquipo: pickEditedField(
+      updatedTicket.modeloEquipo,
+      payload.modeloEquipo,
+      current.modeloEquipo
+    ),
+    serial: pickEditedField(
+      updatedTicket.serial,
+      payload.serial,
+      current.serial
+    ),
+  };
+}
+
+function isPermissionErrorMessage(error: string | null): boolean {
+  if (!error) return false;
+  return error.includes('permisos') || error.includes('No tienes');
 }
 
 export const TicketDetailPage: React.FC = () => {
@@ -35,27 +82,19 @@ export const TicketDetailPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Detectar si se debe activar el tab de videollamada desde query params
-  const tabFromQuery = searchParams.get('tab') as
-    | 'details'
-    | 'chat'
-    | 'call'
-    | null;
-  const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'call'>(
-    tabFromQuery || 'details'
+  const tabFromQuery = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<DetailTab>(
+    isDetailTab(tabFromQuery) ? tabFromQuery : 'details'
   );
 
-  // Actualizar tab cuando cambie el query param
   useEffect(() => {
-    if (tabFromQuery && ['details', 'chat', 'call'].includes(tabFromQuery)) {
+    if (isDetailTab(tabFromQuery)) {
       setActiveTab(tabFromQuery);
     }
   }, [tabFromQuery]);
 
-  // Hook para estado de usuarios en tiempo real
   const { getUserWithStatus } = useUserStatus(users);
 
-  // Obtener técnicos disponibles (admin y technician)
   const availableTechnicians = Object.values(users).filter(
     user => user.role === 'admin' || user.role === 'technician'
   );
@@ -68,11 +107,9 @@ export const TicketDetailPage: React.FC = () => {
       setError(null);
 
       try {
-        // Obtener detalles del ticket
         const fetchedTicket = await ticketService.getTicketById(ticketId);
         setTicket(fetchedTicket);
 
-        // Obtener usuarios (cliente y técnico)
         const usersData = await userService.getUsers();
         const usersMap = usersData.reduce<Record<string, User>>((acc, user) => {
           acc[user.id] = user;
@@ -152,24 +189,7 @@ export const TicketDetailPage: React.FC = () => {
 
     try {
       const updatedTicket = await ticketService.updateTicket(ticket.id, payload);
-      setTicket({
-        ...updatedTicket,
-        title: updatedTicket.title ?? payload.title,
-        description: updatedTicket.description ?? payload.description,
-        priority: updatedTicket.priority ?? payload.priority ?? ticket.priority,
-        marca:
-          updatedTicket.marca !== undefined
-            ? updatedTicket.marca
-            : payload.marca ?? ticket.marca,
-        modeloEquipo:
-          updatedTicket.modeloEquipo !== undefined
-            ? updatedTicket.modeloEquipo
-            : payload.modeloEquipo ?? ticket.modeloEquipo,
-        serial:
-          updatedTicket.serial !== undefined
-            ? updatedTicket.serial
-            : payload.serial ?? ticket.serial,
-      });
+      setTicket(mergeEditedTicket(ticket, updatedTicket, payload));
     } catch (err) {
       console.error('Error al editar el ticket:', err);
       throw err;
@@ -185,11 +205,7 @@ export const TicketDetailPage: React.FC = () => {
   }
 
   if (error || !ticket) {
-    // Verificar si es un error de permisos
-    const isPermissionError =
-      error && (error.includes('permisos') || error.includes('No tienes'));
-
-    if (isPermissionError) {
+    if (isPermissionErrorMessage(error)) {
       return (
         <PermissionDenied
           message={error}
@@ -214,8 +230,6 @@ export const TicketDetailPage: React.FC = () => {
     );
   }
 
-  // Si el usuario actual es el cliente, usar currentUser como fallback
-  // Aplicar estado de conexión en tiempo real
   const customerBase =
     users[ticket.customerId] ||
     (currentUser?.id === ticket.customerId ? currentUser : undefined);
@@ -225,6 +239,11 @@ export const TicketDetailPage: React.FC = () => {
     ? users[ticket.technicianId]
     : undefined;
   const technician = getUserWithStatus(technicianBase);
+
+  const callRecipientId =
+    currentUser?.id === ticket.customerId
+      ? ticket.technicianId ?? ''
+      : ticket.customerId;
 
   return (
     <div className='h-full flex flex-col'>
@@ -285,11 +304,7 @@ export const TicketDetailPage: React.FC = () => {
 
         {activeTab === 'call' && (
           <VideoCallPanel
-            recipientId={
-              currentUser?.id === ticket.customerId
-                ? ticket.technicianId ?? ''
-                : ticket.customerId
-            }
+            recipientId={callRecipientId}
             ticketId={ticket.id}
             localUser={currentUser ?? undefined}
             remoteUsers={buildRemoteUsersForCall(
