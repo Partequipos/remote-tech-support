@@ -17,6 +17,7 @@ import { Textarea } from '../atoms/Textarea';
 import { useAuth } from '../context/AuthContext';
 import { ticketService, userService } from '../services/api';
 import { Ticket, User as UserType } from '../types';
+import { hoursToActualMinutes } from '../utils/supportDuration';
 
 const MARCAS = ['Case', 'Dynapac', 'Hitachi', 'Liugong', 'Okada', 'Yanmar'];
 
@@ -45,6 +46,8 @@ export const CreateTicketPage: React.FC = () => {
     marca: '',
     modeloEquipo: '',
     serial: '',
+    /** Horas que duró el soporte remoto (se persiste como minutos en actualTime) */
+    duracionHoras: '',
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -143,6 +146,14 @@ export const CreateTicketPage: React.FC = () => {
       return;
     }
 
+    const actualTimeMinutes = hoursToActualMinutes(formData.duracionHoras);
+    if (actualTimeMinutes === null) {
+      toast.error(
+        'Indique el tiempo de duración del soporte remoto en horas (mayor a 0)'
+      );
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -162,6 +173,7 @@ export const CreateTicketPage: React.FC = () => {
         marca: formData.marca || undefined,
         modeloEquipo: formData.modeloEquipo.trim() || undefined,
         serial: formData.serial.trim() || undefined,
+        actualTime: actualTimeMinutes,
       };
 
       if (user.role === 'customer') {
@@ -334,6 +346,40 @@ export const CreateTicketPage: React.FC = () => {
               <p className='text-xs text-muted-foreground'>
                 Asistencia técnica remota para resolver problemas de Maquinaria
                 Pesada
+              </p>
+            </div>
+
+            <div className='space-y-2 rounded-lg border-2 border-red-600 bg-red-50 p-4 dark:border-red-500 dark:bg-red-950/40'>
+              <label
+                htmlFor='duracionHoras'
+                className='text-sm font-bold text-red-700 dark:text-red-400'
+              >
+                Tiempo de duración del soporte remoto (horas) *
+              </label>
+              <Input
+                id='duracionHoras'
+                type='number'
+                inputMode='decimal'
+                min={0.25}
+                step={0.25}
+                required
+                value={formData.duracionHoras}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setFormData(prev => ({
+                    ...prev,
+                    duracionHoras: e.target.value,
+                  }))
+                }
+                placeholder='Ej: 1.5'
+                className='border-red-500 font-semibold text-red-800 focus-visible:ring-red-600 dark:border-red-400 dark:text-red-200'
+                aria-describedby='duracionHoras-help'
+              />
+              <p
+                id='duracionHoras-help'
+                className='text-xs font-medium text-red-700 dark:text-red-300'
+              >
+                Indique cuántas horas duró el soporte remoto. Use decimales si
+                aplica (ej. 0.5 = 30 min, 1.5 = 1 h 30 min).
               </p>
             </div>
 

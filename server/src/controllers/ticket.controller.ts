@@ -337,6 +337,15 @@ async function resolveCustomerIdForTicket(
   return { ok: true, customerId: customer.id };
 }
 
+/** Normaliza duración enviada en minutos (desde horas en UI). */
+function parseActualTimeMinutes(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n);
+}
+
 export const createTicket = async (req: Request, res: Response) => {
   try {
     const {
@@ -350,6 +359,7 @@ export const createTicket = async (req: Request, res: Response) => {
       marca,
       modeloEquipo,
       serial,
+      actualTime,
     } = req.body;
     const user = req.user as { id: string; role: string; email: string };
 
@@ -382,6 +392,16 @@ export const createTicket = async (req: Request, res: Response) => {
     }
     const { customerId } = resolved;
 
+    const hasActualTimeInput =
+      actualTime !== undefined && actualTime !== null && actualTime !== '';
+    const actualTimeMinutes = parseActualTimeMinutes(actualTime);
+    if (hasActualTimeInput && actualTimeMinutes === null) {
+      return res.status(400).json({
+        message:
+          'La duración del soporte remoto debe ser un valor numérico válido mayor a 0',
+      });
+    }
+
     const ticket = await Ticket.create({
       title,
       description,
@@ -395,6 +415,7 @@ export const createTicket = async (req: Request, res: Response) => {
         typeof serial === 'string' && serial.trim() !== ''
           ? serial.trim().slice(0, 120)
           : null,
+      actualTime: actualTimeMinutes ?? null,
     });
 
     // Obtener el ticket con la información del cliente

@@ -23,6 +23,7 @@ import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { Textarea } from '../atoms/Textarea';
 import { Ticket, TicketEditPayload, User } from '../types';
+import { formatActualMinutesAsHours } from '../utils/supportDuration';
 
 const MARCAS = ['Case', 'Dynapac', 'Hitachi', 'Liugong', 'Okada', 'Yanmar'];
 
@@ -799,6 +800,16 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
                 modeloEquipo={ticket.modeloEquipo}
                 serial={ticket.serial}
               />
+              {formatActualMinutesAsHours(ticket.actualTime) ? (
+                <div className='mt-3 rounded-md border border-red-600 bg-red-50 px-3 py-2 dark:border-red-500 dark:bg-red-950/40'>
+                  <p className='text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400'>
+                    Duración del soporte remoto
+                  </p>
+                  <p className='text-sm font-bold text-red-800 dark:text-red-200'>
+                    {formatActualMinutesAsHours(ticket.actualTime)} hora(s)
+                  </p>
+                </div>
+              ) : null}
             </div>
           )}
 

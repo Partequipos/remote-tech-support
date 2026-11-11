@@ -47,6 +47,11 @@ export interface Ticket {
   modeloEquipo?: string | null;
   /** Número de serie del equipo (S/N) */
   serial?: string | null;
+  /**
+   * Duración real del soporte remoto en minutos.
+   * En el formulario de creación se captura en horas.
+   */
+  actualTime?: number | null;
   /** Sistemas del equipo que comprometen la falla (selección múltiple por técnico) */
   sistemas?: string[];
 }

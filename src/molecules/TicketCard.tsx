@@ -5,6 +5,7 @@ import { Badge, type BadgeProps } from '../atoms/Badge';
 import { Button } from '../atoms/Button';
 import { Card, CardContent, CardFooter, CardHeader } from '../atoms/Card';
 import { Ticket, User } from '../types';
+import { formatActualMinutesAsHours } from '../utils/supportDuration';
 
 type BadgeVariant = NonNullable<BadgeProps['variant']>;
 
@@ -73,6 +74,7 @@ export const TicketCard: React.FC<TicketCardProps> = ({
   const hasModelo = modeloLabel.length > 0;
   const hasSerial = serialLabel.length > 0;
   const showEquipoRow = hasModelo || hasSerial;
+  const duracionHorasLabel = formatActualMinutesAsHours(ticket.actualTime);
 
   return (
     <Card
@@ -133,6 +135,15 @@ export const TicketCard: React.FC<TicketCardProps> = ({
               >
                 {priorityTranslations[ticket.priority]}
               </Badge>
+              {duracionHorasLabel ? (
+                <Badge
+                  variant='danger'
+                  className='font-semibold'
+                  title='Duración del soporte remoto'
+                >
+                  {duracionHorasLabel} h
+                </Badge>
+              ) : null}
             </div>
           </div>
         </div>
