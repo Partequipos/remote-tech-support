@@ -29,6 +29,13 @@ export interface UpdateUserData {
   phone?: string;
 }
 
+/** Parte recomendada al cliente por soporte remoto */
+export interface ParteSugerida {
+  parteNumero: string;
+  descripcion: string;
+  cantidad: number;
+}
+
 export interface Ticket {
   id: string;
   title: string;
@@ -54,6 +61,8 @@ export interface Ticket {
   actualTime?: number | null;
   /** Sistemas del equipo que comprometen la falla (selección múltiple por técnico) */
   sistemas?: string[];
+  /** Partes sugeridas al cliente (opcional) */
+  partesSugeridas?: ParteSugerida[];
 }
 
 /** Campos que el usuario puede editar en un ticket ya creado */

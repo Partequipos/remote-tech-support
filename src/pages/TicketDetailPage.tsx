@@ -10,7 +10,7 @@ import { ChatPanel } from '../organisms/ChatPanel';
 import { TicketDetails } from '../organisms/TicketDetails';
 import { VideoCallPanel } from '../organisms/VideoCallPanel';
 import { ticketService, userService } from '../services/api';
-import { Ticket, TicketEditPayload, User } from '../types';
+import { ParteSugerida, Ticket, TicketEditPayload, User } from '../types';
 
 type DetailTab = 'details' | 'chat' | 'call';
 
@@ -207,6 +207,23 @@ export const TicketDetailPage: React.FC = () => {
     }
   };
 
+  const handleUpdatePartesSugeridas = async (partes: ParteSugerida[]) => {
+    if (!ticket) return;
+
+    try {
+      const updatedTicket = await ticketService.updateTicket(ticket.id, {
+        partesSugeridas: partes,
+      });
+      setTicket({
+        ...updatedTicket,
+        partesSugeridas: updatedTicket.partesSugeridas ?? partes,
+      });
+    } catch (err) {
+      console.error('Error al actualizar partes sugeridas:', err);
+      throw err;
+    }
+  };
+
   const handleUpdateTicket = async (payload: TicketEditPayload) => {
     if (!ticket) return;
 
@@ -315,6 +332,7 @@ export const TicketDetailPage: React.FC = () => {
             onChangeStatus={handleChangeStatus}
             onAssignTechnician={handleAssignTechnician}
             onUpdateSistemas={handleUpdateSistemas}
+            onUpdatePartesSugeridas={handleUpdatePartesSugeridas}
             onUpdateTicket={handleUpdateTicket}
             onUpdateActualTime={handleUpdateActualTime}
           />

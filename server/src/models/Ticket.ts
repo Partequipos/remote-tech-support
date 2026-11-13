@@ -29,8 +29,65 @@ export interface TicketAttributes {
   serial?: string;
   /** Sistemas del equipo que comprometen la falla (selección múltiple) */
   sistemas?: string[];
+  /** Partes sugeridas al cliente: parteNumero, descripcion, cantidad */
+  partesSugeridas?: ParteSugerida[];
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+export interface ParteSugerida {
+  parteNumero: string;
+  descripcion: string;
+  cantidad: number;
+}
+
+function normalizePartesSugeridas(
+  value: ParteSugerida[] | null | undefined
+): ParteSugerida[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => {
+      const parteNumero = String(item?.parteNumero ?? '')
+        .trim()
+        .slice(0, 120);
+      const descripcion = String(item?.descripcion ?? '')
+        .trim()
+        .slice(0, 500);
+      const rawQty = Number(item?.cantidad);
+      const cantidad =
+        Number.isFinite(rawQty) && rawQty > 0 ? Math.round(rawQty) : 0;
+      return { parteNumero, descripcion, cantidad };
+    })
+    .filter(
+      item =>
+        item.cantidad > 0 &&
+        (item.parteNumero.length > 0 || item.descripcion.length > 0)
+    );
+}
+
+function parsePartesSugeridasRaw(
+  raw: string | null | undefined
+): ParteSugerida[] {
+  if (raw == null || raw === '') return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return normalizePartesSugeridas(
+      parsed.map(item => {
+        if (!item || typeof item !== 'object') {
+          return { parteNumero: '', descripcion: '', cantidad: 0 };
+        }
+        const row = item as Record<string, unknown>;
+        return {
+          parteNumero: String(row.parteNumero ?? ''),
+          descripcion: String(row.descripcion ?? ''),
+          cantidad: Number(row.cantidad ?? 0),
+        };
+      })
+    );
+  } catch {
+    return [];
+  }
 }
 
 export class Ticket extends Model<TicketAttributes> implements TicketAttributes {
@@ -57,6 +114,7 @@ export class Ticket extends Model<TicketAttributes> implements TicketAttributes 
   public modeloEquipo!: string;
   public serial!: string;
   public sistemas!: string[];
+  public partesSugeridas!: ParteSugerida[];
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -183,6 +241,24 @@ Ticket.init(
       set(value: string[] | null | undefined) {
         const arr = Array.isArray(value) ? value : [];
         this.setDataValue('sistemas', arr.length > 0 ? JSON.stringify(arr) : null);
+      },
+    },
+    partesSugeridas: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      get(): ParteSugerida[] {
+        const raw = this.getDataValue('partesSugeridas') as
+          | string
+          | null
+          | undefined;
+        return parsePartesSugeridasRaw(raw);
+      },
+      set(value: ParteSugerida[] | null | undefined) {
+        const arr = normalizePartesSugeridas(value);
+        this.setDataValue(
+          'partesSugeridas',
+          arr.length > 0 ? JSON.stringify(arr) : null
+        );
       },
     },
   },

@@ -23,7 +23,8 @@ import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { Textarea } from '../atoms/Textarea';
 import { toast } from 'react-hot-toast';
-import { Ticket, TicketEditPayload, User } from '../types';
+import { PartesSugeridasPanel } from '../molecules/PartesSugeridasPanel';
+import { ParteSugerida, Ticket, TicketEditPayload, User } from '../types';
 import {
   formatActualMinutesAsHours,
   hoursToActualMinutes,
@@ -597,6 +598,9 @@ interface TicketDetailsProps {
   ) => void | Promise<void>;
   onAssignTechnician?: (technicianId: string) => void;
   onUpdateSistemas?: (sistemas: string[]) => void | Promise<void>;
+  onUpdatePartesSugeridas?: (
+    partes: ParteSugerida[]
+  ) => void | Promise<void>;
   onUpdateTicket?: (payload: TicketEditPayload) => void | Promise<void>;
   onUpdateActualTime?: (actualTimeMinutes: number) => void | Promise<void>;
 }
@@ -612,6 +616,7 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
   onChangeStatus,
   onAssignTechnician,
   onUpdateSistemas,
+  onUpdatePartesSugeridas,
   onUpdateTicket,
   onUpdateActualTime,
 }) => {
@@ -663,6 +668,11 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
     currentUser &&
     (currentUser.role === 'admin' || currentUser.role === 'technician') &&
     onUpdateSistemas;
+
+  const canEditPartesSugeridas =
+    !!currentUser &&
+    (currentUser.role === 'admin' || currentUser.role === 'technician') &&
+    !!onUpdatePartesSugeridas;
 
   const { canEditTicket, canEditPriorityAndEquipo } = resolveTicketEditAccess(
     currentUser,
@@ -1080,6 +1090,12 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
               </div>
             )}
           </div>
+
+          <PartesSugeridasPanel
+            partes={ticket.partesSugeridas ?? []}
+            canEdit={canEditPartesSugeridas}
+            onSave={onUpdatePartesSugeridas}
+          />
 
           <div className='space-y-3'>
             <h3 className='text-base font-medium'>Personas</h3>

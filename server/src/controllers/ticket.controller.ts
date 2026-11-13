@@ -15,12 +15,13 @@ type TicketWithRelations = Ticket & {
   technician?: User;
 };
 
-/** Convierte un ticket a objeto plano asegurando que sistemas sea array (getter), no el string JSON crudo */
+/** Convierte un ticket a objeto plano asegurando getters JSON (no string crudo) */
 function ticketToPlain(
   ticket: Ticket | TicketWithRelations,
   plain: Record<string, unknown>
 ): Record<string, unknown> {
   plain.sistemas = ticket.sistemas ?? [];
+  plain.partesSugeridas = ticket.partesSugeridas ?? [];
   return plain;
 }
 
@@ -657,6 +658,7 @@ function buildTicketUpdateData(
     technicianId?: string;
     technicalObservations?: string;
     sistemas?: string[];
+    partesSugeridas?: unknown;
     marca?: string | null;
     modeloEquipo?: string | null;
     serial?: string | null;
@@ -678,6 +680,15 @@ function buildTicketUpdateData(
     updateData.sistemas = body.sistemas.filter(
       (s): s is string => typeof s === 'string' && s.trim() !== ''
     );
+  }
+  if (body.partesSugeridas !== undefined) {
+    if (!Array.isArray(body.partesSugeridas)) {
+      return {
+        updateData,
+        error: 'partesSugeridas debe ser un arreglo de partes',
+      };
+    }
+    updateData.partesSugeridas = body.partesSugeridas as TicketAttributes['partesSugeridas'];
   }
   if (body.marca !== undefined) {
     Object.assign(updateData, { marca: normalizeOptionalText(body.marca, 100) });
