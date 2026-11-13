@@ -22,8 +22,17 @@ import { Card, CardContent, CardFooter, CardHeader } from '../atoms/Card';
 import { Input } from '../atoms/Input';
 import { Select } from '../atoms/Select';
 import { Textarea } from '../atoms/Textarea';
+import { toast } from 'react-hot-toast';
 import { Ticket, TicketEditPayload, User } from '../types';
-import { formatActualMinutesAsHours } from '../utils/supportDuration';
+import {
+  formatActualMinutesAsHours,
+  hoursToActualMinutes,
+} from '../utils/supportDuration';
+
+const STATUS_NEEDS_DURATION = new Set<Ticket['status']>([
+  'closed',
+  'redirected',
+]);
 
 const MARCAS = ['Case', 'Dynapac', 'Hitachi', 'Liugong', 'Okada', 'Yanmar'];
 
@@ -211,11 +220,63 @@ function sistemaToInputId(sistema: string): string {
   return sistema.replace(/\s+/g, '-'); // NOSONAR
 }
 
+const SupportDurationInput: React.FC<{
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  reminder?: boolean;
+}> = ({ id, value, onChange, required = false, reminder = false }) => (
+  <div
+    className={
+      reminder
+        ? 'space-y-2 rounded-lg border-2 border-red-600 bg-red-50 p-3 dark:border-red-500 dark:bg-red-950/40'
+        : 'space-y-2'
+    }
+  >
+    <label
+      htmlFor={id}
+      className={
+        reminder
+          ? 'block text-sm font-bold text-red-700 dark:text-red-400'
+          : 'block text-sm font-medium'
+      }
+    >
+      Tiempo de duración del soporte remoto (horas)
+      {required ? ' *' : ''}
+    </label>
+    {reminder ? (
+      <p className='text-xs font-medium text-red-700 dark:text-red-300'>
+        Recuerde indicar cuántas horas duró el soporte remoto antes de
+        confirmar.
+      </p>
+    ) : null}
+    <Input
+      id={id}
+      type='number'
+      inputMode='decimal'
+      min={0.25}
+      step={0.25}
+      required={required}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder='Ej: 1.5'
+      className={
+        reminder
+          ? 'border-red-500 font-semibold text-red-800 focus-visible:ring-red-600 dark:border-red-400 dark:text-red-200'
+          : undefined
+      }
+    />
+  </div>
+);
+
 interface ObservationsModalProps {
   show: boolean;
   pendingStatus: Ticket['status'] | null;
   technicalObservations: string;
   onObservationsChange: (value: string) => void;
+  duracionHoras: string;
+  onDuracionHorasChange: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
   isChangingStatus: boolean;
@@ -226,6 +287,8 @@ const ObservationsModal: React.FC<ObservationsModalProps> = ({
   pendingStatus,
   technicalObservations,
   onObservationsChange,
+  duracionHoras,
+  onDuracionHorasChange,
   onConfirm,
   onCancel,
   isChangingStatus,
@@ -234,13 +297,24 @@ const ObservationsModal: React.FC<ObservationsModalProps> = ({
   const statusLabel = pendingStatus
     ? STATUS_TRANSLATIONS[pendingStatus]
     : '';
+  const askDuration =
+    pendingStatus !== null && STATUS_NEEDS_DURATION.has(pendingStatus);
   return (
     <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
-      <div className='bg-background rounded-lg p-6 w-full max-w-md mx-4 shadow-xl'>
-        <h3 className='text-lg font-semibold mb-4'>
+      <div className='bg-background rounded-lg p-6 w-full max-w-md mx-4 shadow-xl space-y-4'>
+        <h3 className='text-lg font-semibold'>
           Cambiar estado a: {statusLabel}
         </h3>
-        <div className='mb-4'>
+        {askDuration ? (
+          <SupportDurationInput
+            id='status-duracion-horas'
+            value={duracionHoras}
+            onChange={onDuracionHorasChange}
+            required
+            reminder
+          />
+        ) : null}
+        <div>
           <label
             htmlFor={OBSERVATIONS_TEXTAREA_ID}
             className='block text-sm font-medium mb-2'
@@ -516,10 +590,15 @@ interface TicketDetailsProps {
   availableTechnicians?: User[];
   onStartCall: () => void;
   onStartChat: () => void;
-  onChangeStatus: (status: Ticket['status'], technicalObservations?: string) => void | Promise<void>;
+  onChangeStatus: (
+    status: Ticket['status'],
+    technicalObservations?: string,
+    actualTimeMinutes?: number
+  ) => void | Promise<void>;
   onAssignTechnician?: (technicianId: string) => void;
   onUpdateSistemas?: (sistemas: string[]) => void | Promise<void>;
   onUpdateTicket?: (payload: TicketEditPayload) => void | Promise<void>;
+  onUpdateActualTime?: (actualTimeMinutes: number) => void | Promise<void>;
 }
 
 export const TicketDetails: React.FC<TicketDetailsProps> = ({
@@ -534,12 +613,20 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
   onAssignTechnician,
   onUpdateSistemas,
   onUpdateTicket,
+  onUpdateActualTime,
 }) => {
   const [isAssigningTechnician, setIsAssigningTechnician] = useState(false);
   const [selectedTechnicianId, setSelectedTechnicianId] = useState<string>('');
   const [showObservationsModal, setShowObservationsModal] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<Ticket['status'] | null>(null);
   const [technicalObservations, setTechnicalObservations] = useState('');
+  const [duracionHoras, setDuracionHoras] = useState(
+    () => formatActualMinutesAsHours(ticket.actualTime) ?? ''
+  );
+  const [panelDuracionHoras, setPanelDuracionHoras] = useState(
+    () => formatActualMinutesAsHours(ticket.actualTime) ?? ''
+  );
+  const [isSavingDuration, setIsSavingDuration] = useState(false);
   const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [isEditingSistemas, setIsEditingSistemas] = useState(false);
   const [pendingSistemas, setPendingSistemas] = useState<string[]>(
@@ -563,6 +650,14 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
       setEditForm(buildEditFormFromTicket(ticket));
     }
   }, [ticket, isEditingTicket]);
+
+  useEffect(() => {
+    const hours = formatActualMinutesAsHours(ticket.actualTime) ?? '';
+    setPanelDuracionHoras(hours);
+    if (!showObservationsModal) {
+      setDuracionHoras(hours);
+    }
+  }, [ticket.actualTime, showObservationsModal]);
 
   const canEditSistemas =
     currentUser &&
@@ -675,27 +770,50 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
     currentUser &&
     (currentUser.role === 'admin' || currentUser.role === 'technician');
 
+  const openStatusModal = (newStatus: Ticket['status']) => {
+    setPendingStatus(newStatus);
+    setDuracionHoras(formatActualMinutesAsHours(ticket.actualTime) ?? '');
+    setShowObservationsModal(true);
+  };
+
   // Función para manejar cambio de estado con modal de observaciones
   const handleStatusChange = (newStatus: Ticket['status']) => {
     if (isChangingStatus) return; // Prevenir doble click
-    
+
     // Para técnicos/admin, mostrar modal de observaciones en cambios importantes
-    if (canChangeStatus && (newStatus === 'in_progress' || newStatus === 'resolved' || newStatus === 'redirected' || newStatus === 'closed')) {
-      setPendingStatus(newStatus);
-      setShowObservationsModal(true);
+    if (
+      canChangeStatus &&
+      (newStatus === 'in_progress' ||
+        newStatus === 'resolved' ||
+        newStatus === 'redirected' ||
+        newStatus === 'closed')
+    ) {
+      openStatusModal(newStatus);
     } else {
       setIsChangingStatus(true);
-      onChangeStatus(newStatus);
-      setTimeout(() => setIsChangingStatus(false), 2000);
+      void Promise.resolve(onChangeStatus(newStatus)).finally(() => {
+        setTimeout(() => setIsChangingStatus(false), 2000);
+      });
     }
   };
 
   const handleConfirmStatusChange = () => {
     if (!pendingStatus || isChangingStatus) return;
+
+    const needsDuration = STATUS_NEEDS_DURATION.has(pendingStatus);
+    const actualTimeMinutes = hoursToActualMinutes(duracionHoras);
+    if (needsDuration && actualTimeMinutes === null) {
+      toast.error(
+        'Indique el tiempo de duración del soporte remoto en horas antes de continuar'
+      );
+      return;
+    }
+
     setIsChangingStatus(true);
     const result = onChangeStatus(
       pendingStatus,
-      technicalObservations || undefined
+      technicalObservations || undefined,
+      needsDuration ? actualTimeMinutes ?? undefined : undefined
     );
     const closeModal = () => {
       setShowObservationsModal(false);
@@ -703,7 +821,9 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
       setTechnicalObservations('');
       setTimeout(() => setIsChangingStatus(false), 2000);
     };
-    Promise.resolve(result).then(closeModal).catch(() => setIsChangingStatus(false));
+    Promise.resolve(result)
+      .then(closeModal)
+      .catch(() => setIsChangingStatus(false));
   };
 
   // Función para cancelar cambio de estado
@@ -711,6 +831,28 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
     setShowObservationsModal(false);
     setPendingStatus(null);
     setTechnicalObservations('');
+    setDuracionHoras(formatActualMinutesAsHours(ticket.actualTime) ?? '');
+  };
+
+  const canEditDuration =
+    !!canChangeStatus &&
+    !!onUpdateActualTime &&
+    STATUS_NEEDS_DURATION.has(status);
+
+  const handleSaveDuration = () => {
+    if (!onUpdateActualTime || isSavingDuration) return;
+    const minutes = hoursToActualMinutes(panelDuracionHoras);
+    if (minutes === null) {
+      toast.error(
+        'Indique el tiempo de duración del soporte remoto en horas (mayor a 0)'
+      );
+      return;
+    }
+    setIsSavingDuration(true);
+    Promise.resolve(onUpdateActualTime(minutes))
+      .then(() => toast.success('Duración del soporte actualizada'))
+      .catch(() => toast.error('No se pudo guardar la duración del soporte'))
+      .finally(() => setIsSavingDuration(false));
   };
 
   return (
@@ -800,7 +942,7 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
                 modeloEquipo={ticket.modeloEquipo}
                 serial={ticket.serial}
               />
-              {formatActualMinutesAsHours(ticket.actualTime) ? (
+              {formatActualMinutesAsHours(ticket.actualTime) && !canEditDuration ? (
                 <div className='mt-3 rounded-md border border-red-600 bg-red-50 px-3 py-2 dark:border-red-500 dark:bg-red-950/40'>
                   <p className='text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400'>
                     Duración del soporte remoto
@@ -808,6 +950,28 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
                   <p className='text-sm font-bold text-red-800 dark:text-red-200'>
                     {formatActualMinutesAsHours(ticket.actualTime)} hora(s)
                   </p>
+                </div>
+              ) : null}
+              {canEditDuration ? (
+                <div className='mt-3 space-y-3 rounded-lg border-2 border-red-600 bg-red-50 p-4 dark:border-red-500 dark:bg-red-950/40'>
+                  <SupportDurationInput
+                    id='panel-duracion-horas'
+                    value={panelDuracionHoras}
+                    onChange={setPanelDuracionHoras}
+                    required
+                    reminder
+                  />
+                  <Button
+                    type='button'
+                    variant='primary'
+                    size='sm'
+                    onClick={handleSaveDuration}
+                    disabled={isSavingDuration}
+                  >
+                    {isSavingDuration
+                      ? 'Guardando...'
+                      : 'Guardar tiempo de soporte'}
+                  </Button>
                 </div>
               ) : null}
             </div>
@@ -1037,10 +1201,7 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
         onStartChat={onStartChat}
         onStartCall={onStartCall}
         onStatusChange={handleStatusChange}
-        onOpenCloseModal={() => {
-          setPendingStatus('closed');
-          setShowObservationsModal(true);
-        }}
+        onOpenCloseModal={() => openStatusModal('closed')}
       />
 
       <ObservationsModal
@@ -1048,6 +1209,8 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({
         pendingStatus={pendingStatus}
         technicalObservations={technicalObservations}
         onObservationsChange={setTechnicalObservations}
+        duracionHoras={duracionHoras}
+        onDuracionHorasChange={setDuracionHoras}
         onConfirm={handleConfirmStatusChange}
         onCancel={handleCancelStatusChange}
         isChangingStatus={isChangingStatus}

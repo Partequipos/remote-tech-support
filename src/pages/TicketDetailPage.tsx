@@ -133,7 +133,8 @@ export const TicketDetailPage: React.FC = () => {
 
   const handleChangeStatus = async (
     status: Ticket['status'],
-    technicalObservations?: string
+    technicalObservations?: string,
+    actualTimeMinutes?: number
   ) => {
     if (!ticket) return;
 
@@ -141,9 +142,13 @@ export const TicketDetailPage: React.FC = () => {
       const updateData: {
         status: Ticket['status'];
         technicalObservations?: string;
+        actualTime?: number;
       } = { status };
       if (technicalObservations) {
         updateData.technicalObservations = technicalObservations;
+      }
+      if (actualTimeMinutes !== undefined) {
+        updateData.actualTime = actualTimeMinutes;
       }
       const updatedTicket = await ticketService.updateTicket(
         ticket.id,
@@ -152,6 +157,24 @@ export const TicketDetailPage: React.FC = () => {
       setTicket(updatedTicket);
     } catch (err) {
       console.error('Error al actualizar el estado del ticket:', err);
+      throw err;
+    }
+  };
+
+  const handleUpdateActualTime = async (actualTimeMinutes: number) => {
+    if (!ticket) return;
+
+    try {
+      const updatedTicket = await ticketService.updateTicket(ticket.id, {
+        actualTime: actualTimeMinutes,
+      });
+      setTicket({
+        ...updatedTicket,
+        actualTime: updatedTicket.actualTime ?? actualTimeMinutes,
+      });
+    } catch (err) {
+      console.error('Error al actualizar duración del soporte:', err);
+      throw err;
     }
   };
 
@@ -293,6 +316,7 @@ export const TicketDetailPage: React.FC = () => {
             onAssignTechnician={handleAssignTechnician}
             onUpdateSistemas={handleUpdateSistemas}
             onUpdateTicket={handleUpdateTicket}
+            onUpdateActualTime={handleUpdateActualTime}
           />
         )}
 

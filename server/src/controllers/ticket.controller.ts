@@ -632,6 +632,20 @@ function normalizeOptionalText(value: unknown, maxLen: number): string | null {
   return trimmed.slice(0, maxLen);
 }
 
+function applyActualTimeUpdate(
+  updateData: Partial<TicketAttributes>,
+  actualTime: unknown
+): string | null {
+  if (actualTime === undefined) return null;
+  const hasInput = actualTime !== null && actualTime !== '';
+  const minutes = parseActualTimeMinutes(actualTime);
+  if (hasInput && minutes === null) {
+    return 'La duración del soporte remoto debe ser un valor numérico válido mayor a 0';
+  }
+  updateData.actualTime = minutes ?? null;
+  return null;
+}
+
 function buildTicketUpdateData(
   user: { role: string },
   ticket: Ticket,
@@ -646,13 +660,14 @@ function buildTicketUpdateData(
     marca?: string | null;
     modeloEquipo?: string | null;
     serial?: string | null;
+    actualTime?: number | null;
   }
-): Partial<TicketAttributes> {
+): { updateData: Partial<TicketAttributes>; error?: string } {
   const updateData: Partial<TicketAttributes> = {};
   if (user.role === 'customer') {
     if (body.title) updateData.title = body.title;
     if (body.description) updateData.description = body.description;
-    return updateData;
+    return { updateData };
   }
   updateData.title = body.title ?? ticket.title;
   updateData.description = body.description ?? ticket.description;
@@ -677,6 +692,10 @@ function buildTicketUpdateData(
       serial: normalizeOptionalText(body.serial, 120),
     });
   }
+  const actualTimeError = applyActualTimeUpdate(updateData, body.actualTime);
+  if (actualTimeError) {
+    return { updateData, error: actualTimeError };
+  }
   const newObservations = buildTechnicalObservations(
     ticket,
     body.status,
@@ -685,7 +704,7 @@ function buildTicketUpdateData(
   if (newObservations !== undefined) {
     updateData.technicalObservations = newObservations;
   }
-  return updateData;
+  return { updateData };
 }
 
 export const updateTicket = async (req: Request, res: Response) => {
@@ -706,9 +725,12 @@ export const updateTicket = async (req: Request, res: Response) => {
 
     const oldStatus = ticket.status;
     const oldTechnicianId = ticket.technicianId;
-    const updateData = buildTicketUpdateData(user, ticket, body);
+    const built = buildTicketUpdateData(user, ticket, body);
+    if (built.error) {
+      return res.status(400).json({ message: built.error });
+    }
 
-    await ticket.update(updateData);
+    await ticket.update(built.updateData);
 
     if (body.technicianId && body.technicianId !== oldTechnicianId) {
       try {
